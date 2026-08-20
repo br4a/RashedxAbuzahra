@@ -7,7 +7,7 @@ include $(THEOS)/makefiles/common.mk
 
 TWEAK_NAME = RashedxAbuzahra
 RashedxAbuzahra_FILES = Tweak.m
-RashedxAbuzahra_FRAMEWORKS = UIKit Foundation
+RashedxAbuzahra_FRAMEWORKS = UIKit Foundation AVFoundation
 RashedxAbuzahra_CFLAGS = -fobjc-arc
 
 include $(THEOS)/makefiles/tweak.mk

@@ -1,6 +1,7 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 #import <objc/message.h>
+#import <AVFoundation/AVFoundation.h>
 
 // ==================================================
 // State
@@ -639,6 +640,41 @@ static void swizzleMikeElement(void) {
     }
 }
 
+// ==================================================
+// Audio session patch — كل النسخ تتشارك بدل ما تتطارد
+// ==================================================
+static void patchAudioSession() {
+    Class cls = [AVAudioSession class];
+
+    // setCategory:withOptions:error:
+    SEL s1 = @selector(setCategory:withOptions:error:);
+    Method m1 = class_getInstanceMethod(cls, s1);
+    if (m1) {
+        IMP orig1 = method_getImplementation(m1);
+        method_setImplementation(m1, imp_implementationWithBlock(
+            ^BOOL(AVAudioSession *_s, AVAudioSessionCategory cat,
+                  AVAudioSessionCategoryOptions opts, NSError **e) {
+                opts |= AVAudioSessionCategoryOptionMixWithOthers;
+                return ((BOOL(*)(id,SEL,AVAudioSessionCategory,AVAudioSessionCategoryOptions,NSError**))orig1)
+                       (_s, s1, cat, opts, e);
+            }));
+    }
+
+    // setCategory:mode:options:error: (iOS 10+)
+    SEL s2 = @selector(setCategory:mode:options:error:);
+    Method m2 = class_getInstanceMethod(cls, s2);
+    if (m2) {
+        IMP orig2 = method_getImplementation(m2);
+        method_setImplementation(m2, imp_implementationWithBlock(
+            ^BOOL(AVAudioSession *_s, AVAudioSessionCategory cat,
+                  AVAudioSessionMode mode, AVAudioSessionCategoryOptions opts, NSError **e) {
+                opts |= AVAudioSessionCategoryOptionMixWithOthers;
+                return ((BOOL(*)(id,SEL,AVAudioSessionCategory,AVAudioSessionMode,AVAudioSessionCategoryOptions,NSError**))orig2)
+                       (_s, s2, cat, mode, opts, e);
+            }));
+    }
+}
+
 static void startKeepAlive() {
     static NSTimer *t = nil; if (t) return;
     t = [NSTimer scheduledTimerWithTimeInterval:1.5 repeats:YES block:^(NSTimer *_) { ensureButton(); }];
@@ -649,6 +685,7 @@ static void startKeepAlive() {
 // ==================================================
 __attribute__((constructor)) static void _ctor() {
     registerDarwinObs();
+    patchAudioSession();
     [[NSNotificationCenter defaultCenter]
         addObserverForName:UIApplicationDidFinishLaunchingNotification object:nil
         queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *n) {
