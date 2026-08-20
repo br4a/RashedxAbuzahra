@@ -30,6 +30,9 @@ jobs:
           path: theos/sdks
           key: theos-sdks-xcode
 
+      - name: Install ldid
+        run: brew install ldid
+
       - name: Link Xcode iOS SDK
         if: steps.cache-sdk.outputs.cache-hit != 'true'
         run: |
