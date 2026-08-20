@@ -33,13 +33,22 @@ jobs:
         uses: actions/cache@v4
         with:
           path: theos/sdks
-          key: sdks-iPhoneOS16.5
+          key: theos-sdks-latest
 
       - name: Download SDK
         if: steps.cache-sdk.outputs.cache-hit != 'true'
         run: |
-          curl -L https://github.com/theos/sdks/releases/latest/download/iPhoneOS16.5.sdk.tar.zst \
-            | tar --use-compress-program=unzstd -xf - -C theos/sdks/
+          SDK_URL=$(curl -fsSL https://api.github.com/repos/theos/sdks/releases/latest \
+            | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+for a in data['assets']:
+    if a['name'].endswith('.sdk.tar.zst'):
+        print(a['browser_download_url'])
+        break
+")
+          echo "Downloading: $SDK_URL"
+          curl -fL "$SDK_URL" | tar -I zstd -xf - -C theos/sdks/
 
       - name: Build
         run: make clean package FINALPACKAGE=1
