@@ -16,9 +16,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install dependencies
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y fakeroot zstd
+        run: sudo apt-get update -q && sudo apt-get install -y fakeroot zstd jq
 
       - name: Setup Theos
         uses: actions/checkout@v4
@@ -39,14 +37,7 @@ jobs:
         if: steps.cache-sdk.outputs.cache-hit != 'true'
         run: |
           SDK_URL=$(curl -fsSL https://api.github.com/repos/theos/sdks/releases/latest \
-            | python3 -c "
-import sys, json
-data = json.load(sys.stdin)
-for a in data['assets']:
-    if a['name'].endswith('.sdk.tar.zst'):
-        print(a['browser_download_url'])
-        break
-")
+            | jq -r '[.assets[] | select(.name | endswith(".sdk.tar.zst"))] | first | .browser_download_url')
           echo "Downloading: $SDK_URL"
           curl -fL "$SDK_URL" | tar -I zstd -xf - -C theos/sdks/
 
