@@ -111,7 +111,12 @@ static void scheduleRoomCheck() {
         BOOL inRoom = NO;
         for (UIView *v in findMikeElements())
             if (!v.isHidden && v.window && v.alpha > 0.01) { inRoom = YES; break; }
-        if (!inRoom) { stopReplay(); return; }
+        if (!inRoom) {
+            // بث STOP لكل النسخ مش بس هذي
+            CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(),
+                                                 kSWTStop, NULL, NULL, YES);
+            return;
+        }
         scheduleRoomCheck();
     });
 }
@@ -149,8 +154,6 @@ static void stopReplay() {
 // ==================================================
 #define kSWTStart CFSTR("com.swt.replay.start")
 #define kSWTStop  CFSTR("com.swt.replay.stop")
-#define kSWTSlot  CFSTR("com.swt.slot")
-#define kSWTSlotFile @"/tmp/swt_slot"
 
 static void _cbStart(CFNotificationCenterRef c, void *o, CFStringRef n, const void *obj, CFDictionaryRef i) {
     dispatch_async(dispatch_get_main_queue(), ^{ doReplay(); });
@@ -161,16 +164,21 @@ static void _cbStop(CFNotificationCenterRef c, void *o, CFStringRef n, const voi
 static void _cbSlot(CFNotificationCenterRef c, void *o, CFStringRef n, const void *obj, CFDictionaryRef i);
 
 static void postSlotChange(NSInteger slot) {
-    [[NSString stringWithFormat:@"%ld", (long)slot]
-        writeToFile:kSWTSlotFile atomically:YES encoding:NSUTF8StringEncoding error:nil];
-    CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), kSWTSlot, NULL, NULL, YES);
+    NSString *name = [NSString stringWithFormat:@"com.swt.slot.%ld", (long)slot];
+    CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(),
+                                         (__bridge CFStringRef)name, NULL, NULL, YES);
 }
 
 static void registerDarwinObs() {
     CFNotificationCenterRef d = CFNotificationCenterGetDarwinNotifyCenter();
     CFNotificationCenterAddObserver(d, NULL, _cbStart, kSWTStart, NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
     CFNotificationCenterAddObserver(d, NULL, _cbStop,  kSWTStop,  NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
-    CFNotificationCenterAddObserver(d, NULL, _cbSlot,  kSWTSlot,  NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+    for (int i = 1; i <= 10; i++) {
+        NSString *name = [NSString stringWithFormat:@"com.swt.slot.%d", i];
+        CFStringRef cfn = (__bridge_retained CFStringRef)name;
+        CFNotificationCenterAddObserver(d, (void *)(intptr_t)i, _cbSlot, cfn, NULL,
+                                        CFNotificationSuspensionBehaviorDeliverImmediately);
+    }
 }
 
 static void doReplay() {
@@ -589,8 +597,7 @@ static void doReplay() {
 @end
 
 static void _cbSlot(CFNotificationCenterRef c, void *o, CFStringRef n, const void *obj, CFDictionaryRef i) {
-    NSString *s = [NSString stringWithContentsOfFile:kSWTSlotFile encoding:NSUTF8StringEncoding error:nil];
-    NSInteger slot = s.integerValue;
+    NSInteger slot = (NSInteger)o;
     if (slot < 1 || slot > 10) return;
     dispatch_async(dispatch_get_main_queue(), ^{
         [[SWTPanel shared] syncSlotUI:slot];
