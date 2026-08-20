@@ -197,6 +197,7 @@ static void doReplay() {
 @property (nonatomic, strong) UIButton *startBtn;
 @property (nonatomic, strong) UIButton *stopBtn;
 @property (nonatomic, strong) UILabel  *countLbl;
+@property (nonatomic, strong) UIView   *startHandle;
 @end
 
 @implementation SWTPanel
@@ -227,7 +228,7 @@ static void doReplay() {
 }
 
 - (instancetype)initPanel {
-    CGFloat PW = 296, PH = 380;
+    CGFloat PW = 296, PH = 330;
     self = [super initWithFrame:CGRectMake(0, 0, PW, PH)];
     self.backgroundColor = cBG();
     self.layer.cornerRadius = 10;
@@ -284,13 +285,31 @@ static void doReplay() {
 
     CGFloat half = (w - 8) / 2;
 
-    // START — swipe right to start, left to cancel
+    // START — swipe right to start
     UIColor *startBG = [UIColor colorWithRed:0.28 green:0.10 blue:0.60 alpha:1];
-    self.startBtn = [self makeBtn:CGRectMake(x, y, half, 56) title:@"→ START" bg:startBG];
-    self.startBtn.titleLabel.font = mono(14, YES);
+    self.startBtn = [self makeBtn:CGRectMake(x, y, half, 56) title:@"" bg:startBG];
     UIPanGestureRecognizer *startPan = [[UIPanGestureRecognizer alloc]
         initWithTarget:self action:@selector(startPan:)];
     [self.startBtn addGestureRecognizer:startPan];
+
+    // Handle ينسحب يمين
+    UIView *handle = [[UIView alloc] initWithFrame:CGRectMake(4, 6, 44, 44)];
+    handle.backgroundColor = [UIColor colorWithRed:0.55 green:0.20 blue:1.0 alpha:1];
+    handle.layer.cornerRadius = 8;
+    handle.userInteractionEnabled = NO;
+    glow(handle.layer, cBorder(), 6);
+    UILabel *hLbl = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, 44, 44)];
+    hLbl.text = @"▶▶"; hLbl.textAlignment = NSTextAlignmentCenter;
+    hLbl.textColor = UIColor.whiteColor; hLbl.font = mono(14, YES);
+    [handle addSubview:hLbl];
+    [self.startBtn addSubview:handle];
+    self.startHandle = handle;
+
+    UILabel *startLbl = [[UILabel alloc] initWithFrame:CGRectMake(44, 0, half-44, 56)];
+    startLbl.text = @"START"; startLbl.textAlignment = NSTextAlignmentCenter;
+    startLbl.textColor = cText(); startLbl.font = mono(13, YES);
+    startLbl.userInteractionEnabled = NO;
+    [self.startBtn addSubview:startLbl];
     [self addSubview:self.startBtn];
 
     // STOP — beside START
@@ -300,7 +319,7 @@ static void doReplay() {
     [self.stopBtn addTarget:self action:@selector(tappedStop) forControlEvents:UIControlEventTouchUpInside];
     [self addSubview:self.stopBtn];
 
-    // Found counter
+    // Status label
     y += 56 + 8;
     self.countLbl = [[UILabel alloc] initWithFrame:CGRectMake(x, y, w, 12)];
     self.countLbl.text = @"elements: ?";
@@ -309,25 +328,13 @@ static void doReplay() {
     self.countLbl.textAlignment = NSTextAlignmentCenter;
     [self addSubview:self.countLbl];
 
-    // DUMP buttons
-    y += 4;
-    UIColor *dumpBG = [UIColor colorWithRed:0.08 green:0.08 blue:0.20 alpha:1];
-    UIButton *dumpBtn = [self makeBtn:CGRectMake(x, y, w, 26) title:@"[ DUMP METHODS → CLIPBOARD ]" bg:dumpBG];
-    dumpBtn.titleLabel.font = mono(9, YES);
-    [dumpBtn addTarget:self action:@selector(tappedDump) forControlEvents:UIControlEventTouchUpInside];
-    [self addSubview:dumpBtn]; y += 30;
-
-    UIColor *ivarBG = [UIColor colorWithRed:0.08 green:0.15 blue:0.08 alpha:1];
-    UIButton *ivarBtn = [self makeBtn:CGRectMake(x, y, w, 26) title:@"[ DUMP IVARS (LTMikeElement) ]" bg:ivarBG];
-    ivarBtn.titleLabel.font = mono(9, YES);
-    ivarBtn.layer.borderColor = cGreen().CGColor;
-    [ivarBtn addTarget:self action:@selector(tappedDumpIvars) forControlEvents:UIControlEventTouchUpInside];
-    [self addSubview:ivarBtn]; y += 30;
-
+    // قلتش
+    y += 16;
     UIColor *qBG = [UIColor colorWithRed:0.20 green:0.04 blue:0.35 alpha:1];
-    UIButton *qBtn = [self makeBtn:CGRectMake(x, y, w, 26) title:@"[ قلتش ]" bg:qBG];
-    qBtn.titleLabel.font = mono(12, YES);
+    UIButton *qBtn = [self makeBtn:CGRectMake(x, y, w, 40) title:@"[ قلتش ]" bg:qBG];
+    qBtn.titleLabel.font = mono(15, YES);
     qBtn.layer.borderColor = [UIColor colorWithRed:0.7 green:0.2 blue:1.0 alpha:1].CGColor;
+    glow(qBtn.layer, [UIColor colorWithRed:0.7 green:0.2 blue:1.0 alpha:1], 8);
     [qBtn addTarget:self action:@selector(tappedQultash) forControlEvents:UIControlEventTouchUpInside];
     [self addSubview:qBtn];
 
@@ -350,28 +357,37 @@ static void doReplay() {
 }
 
 - (void)startPan:(UIPanGestureRecognizer *)g {
-    UIColor *activeBG = [UIColor colorWithRed:0.55 green:0.15 blue:1.00 alpha:1];
     UIColor *normalBG = [UIColor colorWithRed:0.28 green:0.10 blue:0.60 alpha:1];
     CGPoint trans = [g translationInView:self.startBtn];
+    CGFloat btnW   = self.startBtn.bounds.size.width;
+    CGFloat hW     = self.startHandle.bounds.size.width;
+    CGFloat maxX   = btnW - hW - 4;
 
     if (g.state == UIGestureRecognizerStateBegan) {
-        self.startBtn.backgroundColor = activeBG;
         glow(self.startBtn.layer, cGreen(), 10);
     } else if (g.state == UIGestureRecognizerStateChanged) {
-        // Shift text while dragging right
-        CGFloat pct = MIN(MAX(trans.x / self.startBtn.bounds.size.width, 0), 1);
-        CGFloat r = 0.28 + 0.27*pct, gb = 0.10 + 0.05*pct;
-        self.startBtn.backgroundColor = [UIColor colorWithRed:r green:gb blue:1.0 alpha:1];
+        CGFloat newX = MAX(4, MIN(4 + trans.x, maxX));
+        CGRect f = self.startHandle.frame; f.origin.x = newX; self.startHandle.frame = f;
+        CGFloat pct = (newX - 4) / (maxX - 4);
+        self.startBtn.backgroundColor = [UIColor colorWithRed:0.28+0.27*pct
+                                                        green:0.10+0.05*pct blue:1.0 alpha:1];
     } else if (g.state == UIGestureRecognizerStateEnded) {
-        self.startBtn.backgroundColor = normalBG;
         glow(self.startBtn.layer, cBorder(), 4);
-        if (trans.x > 0) {
+        BOOL triggered = trans.x > btnW * 0.4;
+        [UIView animateWithDuration:0.2 animations:^{
+            CGRect f = self.startHandle.frame; f.origin.x = 4; self.startHandle.frame = f;
+            self.startBtn.backgroundColor = normalBG;
+        }];
+        if (triggered) {
             NSArray *elems = findMikeElements();
             self.countLbl.text = [NSString stringWithFormat:@"elements: %d", (int)elems.count];
             CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), kSWTStart, NULL, NULL, YES);
         }
     } else {
-        self.startBtn.backgroundColor = normalBG;
+        [UIView animateWithDuration:0.15 animations:^{
+            CGRect f = self.startHandle.frame; f.origin.x = 4; self.startHandle.frame = f;
+            self.startBtn.backgroundColor = normalBG;
+        }];
         glow(self.startBtn.layer, cBorder(), 4);
     }
 }
