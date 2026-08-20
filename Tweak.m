@@ -160,13 +160,6 @@ static void registerDarwinObs() {
     int tok;
     notify_register_dispatch(kNStart, &tok, dispatch_get_main_queue(), ^(int t) { doReplay(); });
     notify_register_dispatch(kNStop,  &tok, dispatch_get_main_queue(), ^(int t) { stopReplay(); });
-    for (int i = 1; i <= 10; i++) {
-        char buf[32]; snprintf(buf, sizeof(buf), "com.swt.slot.%d", i);
-        int slot = i;
-        notify_register_dispatch(buf, &tok, dispatch_get_main_queue(), ^(int t) {
-            [[SWTPanel shared] syncSlotUI:slot];
-        });
-    }
 }
 
 static void doReplay() {
@@ -582,6 +575,17 @@ static void doReplay() {
 
 @end
 
+static void registerSlotObs() {
+    int tok;
+    for (int i = 1; i <= 10; i++) {
+        char buf[32]; snprintf(buf, sizeof(buf), "com.swt.slot.%d", i);
+        int slot = i;
+        notify_register_dispatch(buf, &tok, dispatch_get_main_queue(), ^(int t) {
+            [[SWTPanel shared] syncSlotUI:slot];
+        });
+    }
+}
+
 // ==================================================
 // Floating #SWT button
 // ==================================================
@@ -760,6 +764,7 @@ static void startKeepAlive() {
 // ==================================================
 __attribute__((constructor)) static void _ctor() {
     registerDarwinObs();
+    registerSlotObs();
     patchAudioSession();
     [[NSNotificationCenter defaultCenter]
         addObserverForName:UIApplicationDidFinishLaunchingNotification object:nil
