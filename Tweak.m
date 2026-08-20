@@ -99,21 +99,13 @@ __attribute__((unused)) static void forceAvailable(id elem) {
 }
 
 // ==================================================
-// Trigger mic for selected slot
+// Room-leave check (slow — every 1s, not every 1ms)
 // ==================================================
-static void triggerMic() {
-    dispatch_async(dispatch_get_main_queue(), ^{
-        NSArray *elems = findMikeElements();
-        NSInteger idx = selectedSlot - 1;
-        if (idx >= 0 && idx < (NSInteger)elems.count) {
-            id elem = elems[idx];
-            SEL sel = NSSelectorFromString(@"lt_rippleButtonAction:");
-            if ([elem respondsToSelector:sel]) {
-                [UIView setAnimationsEnabled:NO];
-                ((void(*)(id,SEL,id))objc_msgSend)(elem, sel, nil);
-                [UIView setAnimationsEnabled:YES];
-            }
-        }
+static void scheduleRoomCheck() {
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+        if (replayShouldStop) return;
+        if (findMikeElements().count == 0) { stopReplay(); return; }
+        scheduleRoomCheck();
     });
 }
 
@@ -166,21 +158,27 @@ static void registerDarwinObs() {
 static void doReplay() {
     stopReplay();
     replayIndex = 0; burstCount = 0; skipCount = 0; replayShouldStop = NO;
-    dispatch_async(dispatch_get_main_queue(), ^{ freezeMike(); });
-    replayTimer = [NSTimer scheduledTimerWithTimeInterval:(kSpeed / 1000.0)
-        repeats:YES block:^(NSTimer *t) {
-            if (replayShouldStop || replayIndex >= kTimes) {
-                stopReplay(); return;
-            }
-            // لو طار من الروم يوقف تلقائي
-            if (findMikeElements().count == 0) {
-                stopReplay(); return;
-            }
-            if (skipCount > 0) { skipCount--; return; }
-            triggerMic();
-            replayIndex++; burstCount++;
-            if (burstCount >= kBurst) { burstCount = 0; skipCount = kSkip; }
-        }];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        // Cache elements + SEL once — لا تعيد traverse كل 1ms
+        NSArray *elems = findMikeElements();
+        if (!elems.count) return;
+        freezeMike();
+        scheduleRoomCheck();
+        SEL rippleSel = NSSelectorFromString(@"lt_rippleButtonAction:");
+        replayTimer = [NSTimer scheduledTimerWithTimeInterval:(kSpeed / 1000.0)
+            repeats:YES block:^(NSTimer *t) {
+                if (replayShouldStop || replayIndex >= kTimes) { stopReplay(); return; }
+                if (skipCount > 0) { skipCount--; return; }
+                NSInteger idx = selectedSlot - 1;
+                if (idx >= 0 && idx < (NSInteger)elems.count) {
+                    id elem = elems[idx];
+                    if ([elem respondsToSelector:rippleSel])
+                        ((void(*)(id,SEL,id))objc_msgSend)(elem, rippleSel, nil);
+                }
+                replayIndex++; burstCount++;
+                if (burstCount >= kBurst) { burstCount = 0; skipCount = kSkip; }
+            }];
+    });
 }
 
 // ==================================================
@@ -627,9 +625,7 @@ static void swizzleMikeElement(void) {
         IMP orig = method_getImplementation(m);
         method_setImplementation(m, imp_implementationWithBlock(^(UIView *_self, id arg) {
             [UIView setAnimationsEnabled:NO];
-            _self.layer.speed = 999;
             ((void(*)(id,SEL,id))orig)(_self, sel, arg);
-            _self.layer.speed = 1;
             [UIView setAnimationsEnabled:YES];
         }));
     }
