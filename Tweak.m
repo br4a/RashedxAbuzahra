@@ -22,6 +22,9 @@ static const NSInteger kSkip  = 50;
 static void stopReplay(void);
 static void doReplay(void);
 
+#define kSWTStart CFSTR("com.swt.replay.start")
+#define kSWTStop  CFSTR("com.swt.replay.stop")
+
 // ==================================================
 // Colors / font helpers
 // ==================================================
@@ -152,9 +155,6 @@ static void stopReplay() {
 // ==================================================
 // Darwin cross-process sync (كل النسخ تبدأ/توقف/تحدد سيت مع بعض)
 // ==================================================
-#define kSWTStart CFSTR("com.swt.replay.start")
-#define kSWTStop  CFSTR("com.swt.replay.stop")
-
 static void _cbStart(CFNotificationCenterRef c, void *o, CFStringRef n, const void *obj, CFDictionaryRef i) {
     dispatch_async(dispatch_get_main_queue(), ^{ doReplay(); });
 }
