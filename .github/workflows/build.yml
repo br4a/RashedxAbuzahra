@@ -4,27 +4,54 @@ on:
   push:
   workflow_dispatch:
 
+env:
+  THEOS: ${{ github.workspace }}/theos
+
 jobs:
   build:
     runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/theos/theos-builder:latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y fakeroot zstd
+
+      - name: Setup Theos
+        uses: actions/checkout@v4
+        with:
+          repository: theos/theos
+          ref: master
+          path: theos
+          submodules: recursive
+
+      - name: Cache SDK
+        id: cache-sdk
+        uses: actions/cache@v4
+        with:
+          path: theos/sdks
+          key: sdks-iPhoneOS16.5
+
+      - name: Download SDK
+        if: steps.cache-sdk.outputs.cache-hit != 'true'
+        run: |
+          curl -L https://github.com/theos/sdks/releases/latest/download/iPhoneOS16.5.sdk.tar.zst \
+            | tar --use-compress-program=unzstd -xf - -C theos/sdks/
+
       - name: Build
         run: make clean package FINALPACKAGE=1
+
+      - name: Upload deb
+        uses: actions/upload-artifact@v4
+        with:
+          name: RashedxAbuzahra-deb
+          path: packages/*.deb
 
       - name: Upload dylib
         uses: actions/upload-artifact@v4
         with:
           name: RashedxAbuzahra-dylib
-          path: packages/*.deb
-
-      - name: Upload raw dylib
-        uses: actions/upload-artifact@v4
-        with:
-          name: RashedxAbuzahra-raw
           path: .theos/obj/RashedxAbuzahra.dylib
