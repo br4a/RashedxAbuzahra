@@ -2,7 +2,6 @@ THEOS_DEVICE_IP = 0.0.0.0
 ARCHS = arm64 arm64e
 TARGET = iphone:clang:latest:14.0
 
-THEOS ?= $(THEOS_PATH)
 THEOS ?= /home/br4a/theos
 include $(THEOS)/makefiles/common.mk
 
