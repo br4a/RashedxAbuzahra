@@ -19,6 +19,9 @@ static const NSInteger kSpeed = 1;
 static const NSInteger kBurst = 440;
 static const NSInteger kSkip  = 50;
 
+static void stopReplay(void);
+static void doReplay(void);
+
 // ==================================================
 // Colors / font helpers
 // ==================================================
