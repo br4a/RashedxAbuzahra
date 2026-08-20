@@ -1,0 +1,9 @@
+Package: com.rashedxabuzahra.swt
+Name: RashedxAbuzahra
+Depends: mobilesubstrate
+Version: 1.0
+Architecture: iphoneos-arm64
+Description: SWT Panel - mic replay tool
+Maintainer: RashedxAbuzahra
+Author: RashedxAbuzahra
+Section: Tweaks

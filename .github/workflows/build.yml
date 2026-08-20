@@ -1,0 +1,30 @@
+name: Build
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/theos/theos-builder:latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build
+        run: make clean package FINALPACKAGE=1
+
+      - name: Upload dylib
+        uses: actions/upload-artifact@v4
+        with:
+          name: RashedxAbuzahra-dylib
+          path: packages/*.deb
+
+      - name: Upload raw dylib
+        uses: actions/upload-artifact@v4
+        with:
+          name: RashedxAbuzahra-raw
+          path: .theos/obj/RashedxAbuzahra.dylib
