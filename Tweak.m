@@ -145,6 +145,24 @@ static void stopReplay() {
     dispatch_async(dispatch_get_main_queue(), ^{ unfreezeMike(); });
 }
 
+// ==================================================
+// Darwin cross-process sync (كل النسخ تبدأ/توقف مع بعض)
+// ==================================================
+#define kSWTStart CFSTR("com.swt.replay.start")
+#define kSWTStop  CFSTR("com.swt.replay.stop")
+
+static void _cbStart(CFNotificationCenterRef c, void *o, CFStringRef n, const void *obj, CFDictionaryRef i) {
+    dispatch_async(dispatch_get_main_queue(), ^{ doReplay(); });
+}
+static void _cbStop(CFNotificationCenterRef c, void *o, CFStringRef n, const void *obj, CFDictionaryRef i) {
+    dispatch_async(dispatch_get_main_queue(), ^{ stopReplay(); });
+}
+static void registerDarwinObs() {
+    CFNotificationCenterRef d = CFNotificationCenterGetDarwinNotifyCenter();
+    CFNotificationCenterAddObserver(d, NULL, _cbStart, kSWTStart, NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+    CFNotificationCenterAddObserver(d, NULL, _cbStop,  kSWTStop,  NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+}
+
 static void doReplay() {
     stopReplay();
     replayIndex = 0; burstCount = 0; skipCount = 0; replayShouldStop = NO;
@@ -348,14 +366,16 @@ static void doReplay() {
         if (trans.x > 0) {
             NSArray *elems = findMikeElements();
             self.countLbl.text = [NSString stringWithFormat:@"elements: %d", (int)elems.count];
-            doReplay();
+            CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), kSWTStart, NULL, NULL, YES);
         }
     } else {
         self.startBtn.backgroundColor = normalBG;
         glow(self.startBtn.layer, cBorder(), 4);
     }
 }
-- (void)tappedStop { stopReplay(); }
+- (void)tappedStop {
+    CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), kSWTStop, NULL, NULL, YES);
+}
 
 - (void)tappedQultash {
     Class faceCls = NSClassFromString(@"YallaLite.LTLiveMikeFace")
@@ -632,6 +652,7 @@ static void startKeepAlive() {
 // Constructor
 // ==================================================
 __attribute__((constructor)) static void _ctor() {
+    registerDarwinObs();
     [[NSNotificationCenter defaultCenter]
         addObserverForName:UIApplicationDidFinishLaunchingNotification object:nil
         queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *n) {
