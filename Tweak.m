@@ -2,6 +2,7 @@
 #import <objc/runtime.h>
 #import <objc/message.h>
 #import <AVFoundation/AVFoundation.h>
+#include <notify.h>
 
 // ==================================================
 // State
@@ -22,8 +23,8 @@ static const NSInteger kSkip  = 50;
 static void stopReplay(void);
 static void doReplay(void);
 
-#define kSWTStart CFSTR("com.swt.replay.start")
-#define kSWTStop  CFSTR("com.swt.replay.stop")
+#define kNStart "com.swt.replay.start"
+#define kNStop  "com.swt.replay.stop"
 
 // ==================================================
 // Colors / font helpers
@@ -114,12 +115,7 @@ static void scheduleRoomCheck() {
         BOOL inRoom = NO;
         for (UIView *v in findMikeElements())
             if (!v.isHidden && v.window && v.alpha > 0.01) { inRoom = YES; break; }
-        if (!inRoom) {
-            // بث STOP لكل النسخ مش بس هذي
-            CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(),
-                                                 kSWTStop, NULL, NULL, YES);
-            return;
-        }
+        if (!inRoom) { notify_post(kNStop); return; }
         scheduleRoomCheck();
     });
 }
@@ -155,29 +151,21 @@ static void stopReplay() {
 // ==================================================
 // Darwin cross-process sync (كل النسخ تبدأ/توقف/تحدد سيت مع بعض)
 // ==================================================
-static void _cbStart(CFNotificationCenterRef c, void *o, CFStringRef n, const void *obj, CFDictionaryRef i) {
-    dispatch_async(dispatch_get_main_queue(), ^{ doReplay(); });
-}
-static void _cbStop(CFNotificationCenterRef c, void *o, CFStringRef n, const void *obj, CFDictionaryRef i) {
-    dispatch_async(dispatch_get_main_queue(), ^{ stopReplay(); });
-}
-static void _cbSlot(CFNotificationCenterRef c, void *o, CFStringRef n, const void *obj, CFDictionaryRef i);
-
 static void postSlotChange(NSInteger slot) {
-    NSString *name = [NSString stringWithFormat:@"com.swt.slot.%ld", (long)slot];
-    CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(),
-                                         (__bridge CFStringRef)name, NULL, NULL, YES);
+    char buf[32]; snprintf(buf, sizeof(buf), "com.swt.slot.%d", (int)slot);
+    notify_post(buf);
 }
 
 static void registerDarwinObs() {
-    CFNotificationCenterRef d = CFNotificationCenterGetDarwinNotifyCenter();
-    CFNotificationCenterAddObserver(d, NULL, _cbStart, kSWTStart, NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
-    CFNotificationCenterAddObserver(d, NULL, _cbStop,  kSWTStop,  NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+    int tok;
+    notify_register_dispatch(kNStart, &tok, dispatch_get_main_queue(), ^(int t) { doReplay(); });
+    notify_register_dispatch(kNStop,  &tok, dispatch_get_main_queue(), ^(int t) { stopReplay(); });
     for (int i = 1; i <= 10; i++) {
-        NSString *name = [NSString stringWithFormat:@"com.swt.slot.%d", i];
-        CFStringRef cfn = (__bridge_retained CFStringRef)name;
-        CFNotificationCenterAddObserver(d, (void *)(intptr_t)i, _cbSlot, cfn, NULL,
-                                        CFNotificationSuspensionBehaviorDeliverImmediately);
+        char buf[32]; snprintf(buf, sizeof(buf), "com.swt.slot.%d", i);
+        int slot = i;
+        notify_register_dispatch(buf, &tok, dispatch_get_main_queue(), ^(int t) {
+            [[SWTPanel shared] syncSlotUI:slot];
+        });
     }
 }
 
@@ -410,7 +398,7 @@ static void doReplay() {
         if (triggered) {
             NSArray *elems = findMikeElements();
             self.countLbl.text = [NSString stringWithFormat:@"elements: %d", (int)elems.count];
-            CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), kSWTStart, NULL, NULL, YES);
+            notify_post(kNStart);
         }
     } else {
         [UIView animateWithDuration:0.15 animations:^{
@@ -420,9 +408,7 @@ static void doReplay() {
         glow(self.startBtn.layer, cBorder(), 4);
     }
 }
-- (void)tappedStop {
-    CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), kSWTStop, NULL, NULL, YES);
-}
+- (void)tappedStop { notify_post(kNStop); }
 
 - (void)tappedQultash {
     Class faceCls = NSClassFromString(@"YallaLite.LTLiveMikeFace")
@@ -595,14 +581,6 @@ static void doReplay() {
 }
 
 @end
-
-static void _cbSlot(CFNotificationCenterRef c, void *o, CFStringRef n, const void *obj, CFDictionaryRef i) {
-    NSInteger slot = (NSInteger)o;
-    if (slot < 1 || slot > 10) return;
-    dispatch_async(dispatch_get_main_queue(), ^{
-        [[SWTPanel shared] syncSlotUI:slot];
-    });
-}
 
 // ==================================================
 // Floating #SWT button
