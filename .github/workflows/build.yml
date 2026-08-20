@@ -9,14 +9,11 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Install dependencies
-        run: sudo apt-get update -q && sudo apt-get install -y fakeroot zstd jq
 
       - name: Setup Theos
         uses: actions/checkout@v4
@@ -31,15 +28,15 @@ jobs:
         uses: actions/cache@v4
         with:
           path: theos/sdks
-          key: theos-sdks-latest
+          key: theos-sdks-xcode
 
-      - name: Download SDK
+      - name: Link Xcode iOS SDK
         if: steps.cache-sdk.outputs.cache-hit != 'true'
         run: |
-          SDK_URL=$(curl -fsSL https://api.github.com/repos/theos/sdks/releases/latest \
-            | jq -r '[.assets[] | select(.name | endswith(".sdk.tar.zst"))] | first | .browser_download_url')
-          echo "Downloading: $SDK_URL"
-          curl -fL "$SDK_URL" | tar -I zstd -xf - -C theos/sdks/
+          SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
+          SDK_VER=$(xcrun --sdk iphoneos --show-sdk-version)
+          echo "SDK: $SDK_PATH (v$SDK_VER)"
+          ln -sf "$SDK_PATH" "theos/sdks/iPhoneOS${SDK_VER}.sdk"
 
       - name: Build
         run: make clean package FINALPACKAGE=1
