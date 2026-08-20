@@ -106,9 +106,12 @@ __attribute__((unused)) static void forceAvailable(id elem) {
 // Room-leave check (slow — every 1s, not every 1ms)
 // ==================================================
 static void scheduleRoomCheck() {
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3*NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         if (replayShouldStop) return;
-        if (findMikeElements().count == 0) { stopReplay(); return; }
+        BOOL inRoom = NO;
+        for (UIView *v in findMikeElements())
+            if (!v.isHidden && v.window && v.alpha > 0.01) { inRoom = YES; break; }
+        if (!inRoom) { stopReplay(); return; }
         scheduleRoomCheck();
     });
 }
@@ -142,10 +145,12 @@ static void stopReplay() {
 }
 
 // ==================================================
-// Darwin cross-process sync (كل النسخ تبدأ/توقف مع بعض)
+// Darwin cross-process sync (كل النسخ تبدأ/توقف/تحدد سيت مع بعض)
 // ==================================================
 #define kSWTStart CFSTR("com.swt.replay.start")
 #define kSWTStop  CFSTR("com.swt.replay.stop")
+#define kSWTSlot  CFSTR("com.swt.slot")
+#define kSWTSlotFile @"/tmp/swt_slot"
 
 static void _cbStart(CFNotificationCenterRef c, void *o, CFStringRef n, const void *obj, CFDictionaryRef i) {
     dispatch_async(dispatch_get_main_queue(), ^{ doReplay(); });
@@ -153,10 +158,19 @@ static void _cbStart(CFNotificationCenterRef c, void *o, CFStringRef n, const vo
 static void _cbStop(CFNotificationCenterRef c, void *o, CFStringRef n, const void *obj, CFDictionaryRef i) {
     dispatch_async(dispatch_get_main_queue(), ^{ stopReplay(); });
 }
+static void _cbSlot(CFNotificationCenterRef c, void *o, CFStringRef n, const void *obj, CFDictionaryRef i);
+
+static void postSlotChange(NSInteger slot) {
+    [[NSString stringWithFormat:@"%ld", (long)slot]
+        writeToFile:kSWTSlotFile atomically:YES encoding:NSUTF8StringEncoding error:nil];
+    CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), kSWTSlot, NULL, NULL, YES);
+}
+
 static void registerDarwinObs() {
     CFNotificationCenterRef d = CFNotificationCenterGetDarwinNotifyCenter();
     CFNotificationCenterAddObserver(d, NULL, _cbStart, kSWTStart, NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
     CFNotificationCenterAddObserver(d, NULL, _cbStop,  kSWTStop,  NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+    CFNotificationCenterAddObserver(d, NULL, _cbSlot,  kSWTSlot,  NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
 }
 
 static void doReplay() {
@@ -198,6 +212,7 @@ static void doReplay() {
 @property (nonatomic, strong) UIButton *stopBtn;
 @property (nonatomic, strong) UILabel  *countLbl;
 @property (nonatomic, strong) UIView   *startHandle;
+@property (nonatomic, strong) UIButton *qultashBtn;
 @end
 
 @implementation SWTPanel
@@ -337,23 +352,29 @@ static void doReplay() {
     glow(qBtn.layer, [UIColor colorWithRed:0.7 green:0.2 blue:1.0 alpha:1], 8);
     [qBtn addTarget:self action:@selector(tappedQultash) forControlEvents:UIControlEventTouchUpInside];
     [self addSubview:qBtn];
+    self.qultashBtn = qBtn;
 
     UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handlePan:)];
     [self addGestureRecognizer:pan];
     return self;
 }
 
-- (void)slotTapped:(UIButton *)sender {
-    selectedSlot = sender.tag;
+- (void)syncSlotUI:(NSInteger)slot {
+    selectedSlot = slot;
     UIColor *onBG  = [UIColor colorWithRed:0.03 green:0.22 blue:0.12 alpha:1];
     UIColor *offBG = [UIColor colorWithRed:0.12 green:0.05 blue:0.25 alpha:1];
     for (UIButton *b in self.slotBtns) {
-        BOOL sel = (b.tag == selectedSlot);
+        BOOL sel = (b.tag == slot);
         b.backgroundColor   = sel ? onBG : offBG;
         b.layer.borderColor = sel ? cGreen().CGColor : cBorder().CGColor;
         if (sel) glow(b.layer, cGreen(), 6);
         else     glow(b.layer, cBorder(), 4);
     }
+}
+
+- (void)slotTapped:(UIButton *)sender {
+    [self syncSlotUI:sender.tag];
+    postSlotChange(sender.tag);
 }
 
 - (void)startPan:(UIPanGestureRecognizer *)g {
@@ -479,6 +500,12 @@ static void doReplay() {
         if ([face respondsToSelector:sel])
             ((void(*)(id,SEL))objc_msgSend)(face, sel);
     self.countLbl.text = @"قلتش ✓";
+    // تقفيل الزر — يصير رمادي عشان تعرف هذي النسخة خلصت
+    self.qultashBtn.enabled = NO;
+    self.qultashBtn.backgroundColor = [UIColor colorWithRed:0.25 green:0.25 blue:0.25 alpha:1];
+    self.qultashBtn.layer.borderColor = [UIColor colorWithRed:0.4 green:0.4 blue:0.4 alpha:1].CGColor;
+    glow(self.qultashBtn.layer, [UIColor grayColor], 3);
+    [self.qultashBtn setTitle:@"[ قلتش ✓ ]" forState:UIControlStateNormal];
 }
 
 - (void)tappedDump {
@@ -560,6 +587,15 @@ static void doReplay() {
 }
 
 @end
+
+static void _cbSlot(CFNotificationCenterRef c, void *o, CFStringRef n, const void *obj, CFDictionaryRef i) {
+    NSString *s = [NSString stringWithContentsOfFile:kSWTSlotFile encoding:NSUTF8StringEncoding error:nil];
+    NSInteger slot = s.integerValue;
+    if (slot < 1 || slot > 10) return;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [[SWTPanel shared] syncSlotUI:slot];
+    });
+}
 
 // ==================================================
 // Floating #SWT button
