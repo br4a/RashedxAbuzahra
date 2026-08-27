@@ -22,6 +22,7 @@ static const NSInteger kSkip  = 50;
 
 static void stopReplay(void);
 static void doReplay(void);
+static void restartSilentAudio(void);
 
 #define kNStart     "com.swt.replay.start"
 #define kNStop      "com.swt.replay.stop"
