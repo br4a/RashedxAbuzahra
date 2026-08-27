@@ -714,25 +714,32 @@ static AVAudioPlayerNode  *_bgPlayer = nil;
 
 static void startSilentAudio() {
     if (_bgEngine) return;
-    AVAudioSession *s = [AVAudioSession sharedInstance];
-    [s setCategory:AVAudioSessionCategoryPlayback
-       withOptions:AVAudioSessionCategoryOptionMixWithOthers
-             error:nil];
-    [s setActive:YES error:nil];
+    @try {
+        AVAudioSession *s = [AVAudioSession sharedInstance];
+        [s setCategory:AVAudioSessionCategoryPlayback
+           withOptions:AVAudioSessionCategoryOptionMixWithOthers
+                 error:nil];
+        [s setActive:YES error:nil];
 
-    _bgEngine = [AVAudioEngine new];
-    _bgPlayer = [AVAudioPlayerNode new];
-    [_bgEngine attachNode:_bgPlayer];
-    AVAudioFormat *fmt = [[AVAudioFormat alloc] initStandardFormatWithSampleRate:8000 channels:1];
-    [_bgEngine connect:_bgPlayer to:_bgEngine.mainMixerNode format:fmt];
-    [_bgEngine startAndReturnError:nil];
+        _bgEngine = [AVAudioEngine new];
+        _bgPlayer = [AVAudioPlayerNode new];
+        [_bgEngine attachNode:_bgPlayer];
+        AVAudioFormat *fmt = [[AVAudioFormat alloc] initStandardFormatWithSampleRate:8000 channels:1];
+        [_bgEngine connect:_bgPlayer to:_bgEngine.mainMixerNode format:fmt];
 
-    AVAudioFrameCount frames = 800;
-    AVAudioPCMBuffer *buf = [[AVAudioPCMBuffer alloc] initWithPCMFormat:fmt frameCapacity:frames];
-    buf.frameLength = frames;
-    memset(buf.floatChannelData[0], 0, frames * sizeof(float));
-    [_bgPlayer scheduleBuffer:buf atTime:nil options:AVAudioPlayerNodeBufferLoops completionHandler:nil];
-    [_bgPlayer play];
+        NSError *startErr = nil;
+        [_bgEngine startAndReturnError:&startErr];
+        if (startErr || !_bgEngine.isRunning) { _bgEngine = nil; _bgPlayer = nil; return; }
+
+        AVAudioFrameCount frames = 800;
+        AVAudioPCMBuffer *buf = [[AVAudioPCMBuffer alloc] initWithPCMFormat:fmt frameCapacity:frames];
+        buf.frameLength = frames;
+        memset(buf.floatChannelData[0], 0, frames * sizeof(float));
+        [_bgPlayer scheduleBuffer:buf atTime:nil options:AVAudioPlayerNodeBufferLoops completionHandler:nil];
+        [_bgPlayer play];
+    } @catch (NSException *e) {
+        _bgEngine = nil; _bgPlayer = nil;
+    }
 }
 
 static void restartSilentAudio() {
@@ -771,7 +778,8 @@ __attribute__((constructor)) static void _ctor() {
         queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *n) {
             NSNumber *type = n.userInfo[AVAudioSessionInterruptionTypeKey];
             if (type.unsignedIntegerValue == AVAudioSessionInterruptionTypeEnded)
-                restartSilentAudio();
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8*NSEC_PER_SEC)),
+                               dispatch_get_main_queue(), ^{ restartSilentAudio(); });
         }];
     [[NSNotificationCenter defaultCenter]
         addObserverForName:UIApplicationDidBecomeActiveNotification object:nil
