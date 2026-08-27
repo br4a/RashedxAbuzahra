@@ -510,7 +510,7 @@ static void doReplay() {
     [self.qultashBtn setTitle:@"[ قلتش ✓ ]" forState:UIControlStateNormal];
 }
 
-- (void)tappedApplyLock { notify_post(kNApplyLock); }
+- (void)tappedApplyLock { _isMaster = YES; notify_post(kNApplyLock); }
 
 - (void)handlePan:(UIPanGestureRecognizer *)pan {
     CGPoint t = [pan translationInView:self.superview];
@@ -565,7 +565,9 @@ static UIButton *swtBtn = nil;
 }
 @end
 
-static void showApplyLockBanner() {
+static BOOL _isMaster = NO;
+
+static void showApplyLockBanner(BOOL master) {
     UIWindow *win = getKeyWindow(); if (!win) return;
     for (UIView *v in [win.subviews copy])
         if (v.tag == 7766) { [v removeFromSuperview]; }
@@ -577,7 +579,8 @@ static void showApplyLockBanner() {
     banner.layer.borderColor = [UIColor colorWithRed:0.2 green:0.6 blue:1.0 alpha:1].CGColor;
     banner.userInteractionEnabled = YES;
     UILabel *lbl = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, W, 38)];
-    lbl.text = @"⚓ apply-lock مفعّل — اضغط مرتين للإخفاء";
+    lbl.text = master ? @"👑 رئيسي — اضغط مرتين للإخفاء"
+                      : @"⚓ apply-lock مفعّل — اضغط مرتين للإخفاء";
     lbl.textAlignment = NSTextAlignmentCenter;
     lbl.textColor = UIColor.whiteColor;
     lbl.font = mono(10, YES);
@@ -594,8 +597,9 @@ static void showApplyLockBanner() {
 static void registerApplyLockObs() {
     int tok;
     notify_register_dispatch(kNApplyLock, &tok, dispatch_get_main_queue(), ^(int t) {
-        restartSilentAudio();
-        showApplyLockBanner();
+        BOOL master = _isMaster;
+        _isMaster = NO;
+        showApplyLockBanner(master);
     });
 }
 
