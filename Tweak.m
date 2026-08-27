@@ -672,6 +672,36 @@ static void swizzleMikeElement(void) {
 }
 
 // ==================================================
+// Cracked-label bypass — يخفي رسالة "cracked version"
+// ==================================================
+static void swizzleCrackedBypass(void) {
+    SEL sel = @selector(setText:);
+    Method m = class_getInstanceMethod([UILabel class], sel);
+    if (!m) return;
+    IMP orig = method_getImplementation(m);
+    method_setImplementation(m, imp_implementationWithBlock(^(UILabel *_self, NSString *text) {
+        if ([text containsString:@"cracked"] || [text containsString:@"using a cracked"]) {
+            _self.hidden = YES;
+            _self.alpha  = 0;
+            // طرد الـ VC اللي يحتويها
+            UIResponder *r = _self.nextResponder;
+            while (r) {
+                if ([r isKindOfClass:[UIViewController class]]) {
+                    UIViewController *vc = (UIViewController *)r;
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        [vc dismissViewControllerAnimated:NO completion:nil];
+                    });
+                    break;
+                }
+                r = r.nextResponder;
+            }
+            return;
+        }
+        ((void(*)(id,SEL,NSString*))orig)(_self, sel, text);
+    }));
+}
+
+// ==================================================
 // Audio session patch — كل النسخ تتشارك بدل ما تتطارد
 // ==================================================
 static void patchAudioSession() {
@@ -761,6 +791,7 @@ __attribute__((constructor)) static void _ctor() {
     registerSlotObs();
     registerApplyLockObs();
     patchAudioSession();
+    swizzleCrackedBypass();
     [[NSNotificationCenter defaultCenter]
         addObserverForName:UIApplicationDidFinishLaunchingNotification object:nil
         queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *n) {
