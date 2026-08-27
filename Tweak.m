@@ -23,8 +23,9 @@ static const NSInteger kSkip  = 50;
 static void stopReplay(void);
 static void doReplay(void);
 
-#define kNStart "com.swt.replay.start"
-#define kNStop  "com.swt.replay.stop"
+#define kNStart     "com.swt.replay.start"
+#define kNStop      "com.swt.replay.stop"
+#define kNApplyLock "com.swt.applylock"
 
 // ==================================================
 // Colors / font helpers
@@ -232,7 +233,7 @@ static void doReplay() {
 }
 
 - (instancetype)initPanel {
-    CGFloat PW = 296, PH = 330;
+    CGFloat PW = 296, PH = 368;
     self = [super initWithFrame:CGRectMake(0, 0, PW, PH)];
     self.backgroundColor = cBG();
     self.layer.cornerRadius = 10;
@@ -342,6 +343,15 @@ static void doReplay() {
     [qBtn addTarget:self action:@selector(tappedQultash) forControlEvents:UIControlEventTouchUpInside];
     [self addSubview:qBtn];
     self.qultashBtn = qBtn;
+
+    y += 48;
+    UIColor *alBG = [UIColor colorWithRed:0.04 green:0.14 blue:0.22 alpha:1];
+    UIButton *alBtn = [self makeBtn:CGRectMake(x, y, w, 40) title:@"[ apply-lock ]" bg:alBG];
+    alBtn.titleLabel.font = mono(13, YES);
+    alBtn.layer.borderColor = [UIColor colorWithRed:0.2 green:0.6 blue:1.0 alpha:1].CGColor;
+    glow(alBtn.layer, [UIColor colorWithRed:0.2 green:0.6 blue:1.0 alpha:1], 5);
+    [alBtn addTarget:self action:@selector(tappedApplyLock) forControlEvents:UIControlEventTouchUpInside];
+    [self addSubview:alBtn];
 
     UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handlePan:)];
     [self addGestureRecognizer:pan];
@@ -567,6 +577,8 @@ static void doReplay() {
     self.countLbl.text = @"ivars copied!";
 }
 
+- (void)tappedApplyLock { notify_post(kNApplyLock); }
+
 - (void)handlePan:(UIPanGestureRecognizer *)pan {
     CGPoint t = [pan translationInView:self.superview];
     self.center = CGPointMake(self.center.x + t.x, self.center.y + t.y);
@@ -614,7 +626,44 @@ static UIButton *swtBtn = nil;
     v.center = CGPointMake(v.center.x+t.x, v.center.y+t.y);
     [pan setTranslation:CGPointZero inView:v.superview];
 }
+- (void)dismissBanner:(UITapGestureRecognizer *)g {
+    [UIView animateWithDuration:0.2 animations:^{ g.view.alpha = 0; }
+                     completion:^(BOOL f) { [g.view removeFromSuperview]; }];
+}
 @end
+
+static void showApplyLockBanner() {
+    UIWindow *win = getKeyWindow(); if (!win) return;
+    for (UIView *v in [win.subviews copy])
+        if (v.tag == 7766) { [v removeFromSuperview]; }
+    CGFloat W = win.bounds.size.width;
+    UIView *banner = [[UIView alloc] initWithFrame:CGRectMake(0, 52, W, 38)];
+    banner.tag = 7766;
+    banner.backgroundColor = [UIColor colorWithRed:0.04 green:0.10 blue:0.20 alpha:0.95];
+    banner.layer.borderWidth = 1;
+    banner.layer.borderColor = [UIColor colorWithRed:0.2 green:0.6 blue:1.0 alpha:1].CGColor;
+    banner.userInteractionEnabled = YES;
+    UILabel *lbl = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, W, 38)];
+    lbl.text = @"⚓ apply-lock مفعّل — اضغط مرتين للإخفاء";
+    lbl.textAlignment = NSTextAlignmentCenter;
+    lbl.textColor = UIColor.whiteColor;
+    lbl.font = mono(10, YES);
+    lbl.adjustsFontSizeToFitWidth = YES;
+    [banner addSubview:lbl];
+    UITapGestureRecognizer *dbl = [[UITapGestureRecognizer alloc]
+        initWithTarget:[SWTHandler shared] action:@selector(dismissBanner:)];
+    dbl.numberOfTapsRequired = 2;
+    [banner addGestureRecognizer:dbl];
+    [win addSubview:banner];
+    [win bringSubviewToFront:banner];
+}
+
+static void registerApplyLockObs() {
+    int tok;
+    notify_register_dispatch(kNApplyLock, &tok, dispatch_get_main_queue(), ^(int t) {
+        showApplyLockBanner();
+    });
+}
 
 static void createButton(UIWindow *win) {
     CGFloat W = win.bounds.size.width;
@@ -765,6 +814,7 @@ static void startKeepAlive() {
 __attribute__((constructor)) static void _ctor() {
     registerDarwinObs();
     registerSlotObs();
+    registerApplyLockObs();
     patchAudioSession();
     [[NSNotificationCenter defaultCenter]
         addObserverForName:UIApplicationDidFinishLaunchingNotification object:nil
