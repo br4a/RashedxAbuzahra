@@ -162,9 +162,7 @@ static void postSlotChange(NSInteger slot) {
 static void registerDarwinObs() {
     int tok;
     notify_register_dispatch(kNStart, &tok, dispatch_get_main_queue(), ^(int t) {
-        NSTimeInterval j = (arc4random_uniform(16) + 5) / 1000.0; // 5-20ms jitter
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(j * NSEC_PER_SEC)),
-                       dispatch_get_main_queue(), ^{ doReplay(); });
+        doReplay();
     });
     notify_register_dispatch(kNStop, &tok, dispatch_get_main_queue(), ^(int t) { stopReplay(); });
 }
