@@ -165,7 +165,7 @@ static void registerDarwinObs() {
 
 static void doReplay() {
     stopReplay();
-    replayIndex = 0; burstCount = 0; skipCount = 0; replayShouldStop = NO;
+    replayIndex = arc4random_uniform((uint32_t)kBurst); burstCount = 0; skipCount = 0; replayShouldStop = NO;
     dispatch_async(dispatch_get_main_queue(), ^{
         // Cache elements + SEL once — لا تعيد traverse كل 1ms
         NSArray *elems = findMikeElements();
@@ -661,6 +661,7 @@ static void showApplyLockBanner() {
 static void registerApplyLockObs() {
     int tok;
     notify_register_dispatch(kNApplyLock, &tok, dispatch_get_main_queue(), ^(int t) {
+        restartSilentAudio();
         showApplyLockBanner();
     });
 }
