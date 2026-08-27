@@ -118,7 +118,7 @@ static void scheduleRoomCheck() {
         BOOL inRoom = NO;
         for (UIView *v in findMikeElements())
             if (!v.isHidden && v.window && v.alpha > 0.01) { inRoom = YES; break; }
-        if (!inRoom) { notify_post(kNStop); return; }
+        if (!inRoom) { stopReplay(); return; }
         scheduleRoomCheck();
     });
 }
