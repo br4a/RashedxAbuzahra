@@ -23,6 +23,7 @@ static const NSInteger kSkip  = 50;
 static void stopReplay(void);
 static void doReplay(void);
 static void restartSilentAudio(void);
+static BOOL _isMaster = NO;
 
 #define kNStart     "com.swt.replay.start"
 #define kNStop      "com.swt.replay.stop"
@@ -564,8 +565,6 @@ static UIButton *swtBtn = nil;
                      completion:^(BOOL f) { [g.view removeFromSuperview]; }];
 }
 @end
-
-static BOOL _isMaster = NO;
 
 static void showApplyLockBanner(BOOL master) {
     UIWindow *win = getKeyWindow(); if (!win) return;
